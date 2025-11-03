@@ -8,4 +8,4 @@ router.get('/feed', authenticateToken, getCompatibleProfiles);
 router.get('/me', authenticateToken, getMyProfile);
 router.put('/me', authenticateToken, updateMyProfile);
 
-module.exports = router;
+module.exports = router; // ← ¡Exporta el router!
