@@ -5,9 +5,10 @@ const cors = require('cors');
 
 const authRoutes = require('./src/routes/auth.routes');
 const profileRoutes = require('./src/routes/profile.routes');
+const { createTables } = require('./src/config/init-db'); // <-- nuevo
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000; // Render usa 10000 por defecto
 
 app.use(cors({
   origin: [
@@ -30,6 +31,8 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// Iniciar servidor y crear tablas
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Backend corriendo en puerto ${PORT}`);
+  await createTables(); // <-- se ejecuta al iniciar
 });
