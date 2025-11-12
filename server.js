@@ -5,18 +5,32 @@ const cors = require('cors');
 
 const authRoutes = require('./src/routes/auth.routes');
 const profileRoutes = require('./src/routes/profile.routes');
-const { createTables } = require('./src/config/init-db'); // <-- nuevo
+const { createTables } = require('./src/config/init-db');
 
 const app = express();
-const PORT = process.env.PORT || 10000; // Render usa 10000 por defecto
+const PORT = process.env.PORT || 10000;
 
-app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'https://roomie-frontend.vercel.app'
-  ],
-  credentials: true
-}));
+// ✅ Orígenes permitidos (sin espacios y con el dominio correcto)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://roomie-frontend.vercel.app',
+  'https://roomie-frontend-25.vercel.app'
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Permite solicitudes sin origen (como las de Postman o curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS: Origen no permitido por el servidor'));
+      }
+    },
+    credentials: true
+  })
+);
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -34,5 +48,5 @@ app.use((req, res) => {
 // Iniciar servidor y crear tablas
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Backend corriendo en puerto ${PORT}`);
-  await createTables(); // <-- se ejecuta al iniciar
+  await createTables();
 });
