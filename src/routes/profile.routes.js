@@ -1,12 +1,10 @@
 // src/routes/profile.routes.js
 const express = require('express');
-const authenticateToken = require('../middleware/auth.middleware');
-const { getCompatibleProfiles, getMyProfile, updateMyProfile } = require('../controllers/profile.controller');
-
 const router = express.Router();
+const { updateProfile, getMyProfile, uploadSingle } = require('../controllers/profile.controller');
+const auth = require('../middleware/auth'); // Asegúrate de tener este middleware
 
-router.get('/feed', authenticateToken, getCompatibleProfiles);
-router.get('/me', authenticateToken, getMyProfile);
-router.put('/me', authenticateToken, updateMyProfile);
+router.get('/me', auth, getMyProfile);
+router.put('/me', auth, uploadSingle, updateProfile);
 
 module.exports = router;

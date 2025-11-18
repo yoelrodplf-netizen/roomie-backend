@@ -1,159 +1,158 @@
+// src/controllers/auth.controller.js
+const User = require('../models/User');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../config/db');
+const cloudinary = require('../config/cloudinary');
+const multer = require('multer');
 
-const register = async (req, res) => {
-  const {
-    correo_electronico,
-    contrasena,
-    nombre_perfil,
-    edad,
-    genero,
-    profesion = '',
-    habito_limpieza_nivel = 50,
-    nivel_ruido_nivel = 50,
-    consumo_alcohol_nivel = 0,
-    frecuencia_invitados_nivel = 30,
-    horario_vida = '',
-    es_fumador = false,
-    mascotas = '',
-    presupuesto_max_renta = '',
-    fecha_mudanza_min = '',
-    fecha_mudanza_max = '',
-    ubicacion_preferida = '',
-    tipo_propiedad = '',
-    es_amueblada = false,
-    quiere_bano_propio = false,
-    servicios_incluidos = [],
-    caracteristicas_adicionales = [],
-    hobbies = [],
-    filosofia_vida = '',
-    habilidades_intereses = [],
-    descripcion_roomie_ideal = '',
-    expectativas_hogar = '',
-    descripcion_personal = ''
-  } = req.body;
+// Configurar multer para subir temporalmente el archivo
+const upload = multer({ dest: 'uploads/' });
 
-  const client = await pool.connect();
+// ✅ Middleware para subir una sola foto
+exports.uploadSingle = upload.single('foto_perfil');
+
+// ✅ Registro de usuario con foto opcional
+exports.signup = async (req, res) => {
   try {
-    await client.query('BEGIN');
+    const {
+      correo_electronico,
+      contrasena,
+      nombre_perfil,
+      edad,
+      genero,
+      profesion,
+      habito_limpieza_nivel,
+      nivel_ruido_nivel,
+      consumo_alcohol_nivel,
+      frecuencia_invitados_nivel,
+      horario_vida,
+      es_fumador,
+      mascotas,
+      presupuesto_max_renta,
+      fecha_mudanza_min,
+      fecha_mudanza_max,
+      ubicacion_preferida,
+      tipo_propiedad,
+      es_amueblada,
+      quiere_bano_propio,
+      servicios_incluidos,
+      caracteristicas_adicionales,
+      hobbies,
+      filosofia_vida,
+      habilidades_intereses,
+      descripcion_roomie_ideal,
+      expectativas_hogar,
+      descripcion_personal
+    } = req.body;
 
-    const exists = await client.query('SELECT id_usuario FROM usuarios WHERE correo_electronico = $1', [correo_electronico]);
-    if (exists.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'El correo ya está registrado.' });
+    // Validaciones básicas
+    if (!correo_electronico || !contrasena || !nombre_perfil || !edad) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios: correo, contraseña, nombre y edad' });
     }
 
-    const hashed = await bcrypt.hash(contrasena, 12);
-    const user = await client.query(
-      `INSERT INTO usuarios (rol_usuario, nombre_perfil, edad, genero, correo_electronico, contrasena_hash, es_verificado, profesion)
-       VALUES ($1, $2, $3, $4, $5, $6, false, $7) RETURNING id_usuario`,
-      ['AMBOS', nombre_perfil, edad, genero, correo_electronico, hashed, profesion]
-    );
-    const userId = user.rows[0].id_usuario;
+    const existingUser = await User.findOne({ correo_electronico });
+    if (existingUser) {
+      return res.status(400).json({ error: 'El correo electrónico ya está registrado' });
+    }
 
-    // Insertar perfil_estilo_vida
-    await client.query(
-      `INSERT INTO perfil_estilo_vida (id_usuario, habito_limpieza, nivel_ruido, horario_vida, es_fumador, frecuencia_invitados, mascotas, consumo_alcohol_drogas)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        userId,
-        habito_limpieza_nivel?.toString() || null,
-        nivel_ruido_nivel?.toString() || null,
-        horario_vida || null,
-        es_fumador,
-        frecuencia_invitados_nivel?.toString() || null,
-        mascotas || null,
-        consumo_alcohol_nivel?.toString() || null
-      ]
-    );
+    // Subir foto a Cloudinary si se envió
+    let foto_perfil_url = null;
+    if (req.file) {
+      try {
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'roomie-profiles',
+          public_id: `signup-${nombre_perfil.replace(/\s+/g, '-')}-${Date.now()}`,
+          overwrite: true,
+          resource_type: 'image'
+        });
+        foto_perfil_url = result.secure_url;
+      } catch (uploadErr) {
+        console.error('Error al subir a Cloudinary:', uploadErr.message);
+        // No fallamos el registro si la foto falla
+      }
+    }
 
-    // Insertar perfil_necesidades_propiedad
-    await client.query(
-      `INSERT INTO perfil_necesidades_propiedad (
-        id_usuario, presupuesto_max_renta, fecha_mudanza_min, fecha_mudanza_max,
-        ubicacion_preferida, tipo_propiedad, es_amueblada, quiere_bano_propio,
-        servicios_incluidos, caracteristicas_adicionales
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        userId,
-        presupuesto_max_renta || null,
-        fecha_mudanza_min || null,
-        fecha_mudanza_max || null,
-        ubicacion_preferida || null,
-        tipo_propiedad || null,
-        es_amueblada,
-        quiere_bano_propio,
-        servicios_incluidos || null,
-        caracteristicas_adicionales || null
-      ]
-    );
+    // Crear nuevo usuario
+    const newUser = new User({
+      correo_electronico,
+      contrasena: await bcrypt.hash(contrasena, 10),
+      nombre_perfil,
+      edad: parseInt(edad),
+      genero,
+      profesion,
+      habito_limpieza_nivel: parseInt(habito_limpieza_nivel) || 50,
+      nivel_ruido_nivel: parseInt(nivel_ruido_nivel) || 50,
+      consumo_alcohol_nivel: parseInt(consumo_alcohol_nivel) || 0,
+      frecuencia_invitados_nivel: parseInt(frecuencia_invitados_nivel) || 30,
+      horario_vida,
+      es_fumador: es_fumador === 'true' || es_fumador === true,
+      mascotas,
+      presupuesto_max_renta,
+      fecha_mudanza_min,
+      fecha_mudanza_max,
+      ubicacion_preferida,
+      tipo_propiedad,
+      es_amueblada: es_amueblada === 'true' || es_amueblada === true,
+      quiere_bano_propio: quiere_bano_propio === 'true' || quiere_bano_propio === true,
+      servicios_incluidos: Array.isArray(servicios_incluidos) ? servicios_incluidos : (servicios_incluidos ? [servicios_incluidos] : []),
+      caracteristicas_adicionales: Array.isArray(caracteristicas_adicionales) ? caracteristicas_adicionales : (caracteristicas_adicionales ? [caracteristicas_adicionales] : []),
+      hobbies: Array.isArray(hobbies) ? hobbies : (hobbies ? [hobbies] : []),
+      filosofia_vida,
+      habilidades_intereses: Array.isArray(habilidades_intereses) ? habilidades_intereses : (habilidades_intereses ? [habilidades_intereses] : []),
+      descripcion_roomie_ideal,
+      expectativas_hogar,
+      descripcion_personal,
+      foto_perfil: foto_perfil_url,
+      likes: []
+    });
 
-    // Insertar intereses_personalidad
-    await client.query(
-      `INSERT INTO intereses_personalidad (id_usuario, hobbies, filosofia_vida, habilidades_intereses)
-       VALUES ($1, $2, $3, $4)`,
-      [userId, hobbies || null, filosofia_vida || null, habilidades_intereses || null]
-    );
+    await newUser.save();
 
-    // Insertar preguntas_abiertas
-    await client.query(
-      `INSERT INTO preguntas_abiertas (id_usuario, descripcion_roomie_ideal, expectativas_hogar, descripcion_personal)
-       VALUES ($1, $2, $3, $4)`,
-      [userId, descripcion_roomie_ideal || null, expectativas_hogar || null, descripcion_personal || null]
-    );
-
-    await client.query('COMMIT');
-
+    // Generar token JWT
     const token = jwt.sign(
-      { id: userId },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      { id: newUser._id },
+      process.env.JWT_SECRET || 'roomie-secret-key',
+      { expiresIn: '7d' }
     );
 
     res.status(201).json({
       token,
-      user: { id: userId, nombre: nombre_perfil }
+      user: {
+        id: newUser._id,
+        nombre: newUser.nombre_perfil
+      }
     });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Registro falló:', err);
-    res.status(500).json({ error: 'Error al registrar usuario.' });
-  } finally {
-    client.release();
+  } catch (error) {
+    console.error('Error en signup:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 };
 
-const login = async (req, res) => {
-  const { correo_electronico, contrasena } = req.body;
+// ✅ Login (sin cambios, pero lo incluimos para contexto)
+exports.login = async (req, res) => {
   try {
-    const user = await pool.query(
-      'SELECT id_usuario, contrasena_hash, rol_usuario, nombre_perfil FROM usuarios WHERE correo_electronico = $1',
-      [correo_electronico]
-    );
-    if (user.rows.length === 0) return res.status(400).json({ error: 'Credenciales inválidas.' });
-
-    const valid = await bcrypt.compare(contrasena, user.rows[0].contrasena_hash);
-    if (!valid) return res.status(400).json({ error: 'Credenciales inválidas.' });
-
+    const { correo_electronico, contrasena } = req.body;
+    const user = await User.findOne({ correo_electronico });
+    if (!user) {
+      return res.status(400).json({ error: 'Credenciales inválidas' });
+    }
+    const isMatch = await bcrypt.compare(contrasena, user.contrasena);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Credenciales inválidas' });
+    }
     const token = jwt.sign(
-      { id: user.rows[0].id_usuario, rol: user.rows[0].rol_usuario },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      { id: user._id },
+      process.env.JWT_SECRET || 'roomie-secret-key',
+      { expiresIn: '7d' }
     );
-
     res.json({
       token,
       user: {
-        id: user.rows[0].id_usuario,
-        nombre: user.rows[0].nombre_perfil,
-        rol: user.rows[0].rol_usuario
+        id: user._id,
+        nombre: user.nombre_perfil
       }
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error al iniciar sesión.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error en login' });
   }
 };
-
-module.exports = { register, login };
