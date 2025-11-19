@@ -1,17 +1,12 @@
-// src/controllers/auth.controller.js
 const User = require('../models/User');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cloudinary = require('../config/cloudinary');
 const multer = require('multer');
-
-// Configurar multer para subir temporalmente el archivo
 const upload = multer({ dest: 'uploads/' });
 
-// ✅ Middleware para subir una sola foto
 exports.uploadSingle = upload.single('foto_perfil');
 
-// ✅ Registro de usuario con foto opcional
 exports.signup = async (req, res) => {
   try {
     const {
@@ -45,17 +40,15 @@ exports.signup = async (req, res) => {
       descripcion_personal
     } = req.body;
 
-    // Validaciones básicas
     if (!correo_electronico || !contrasena || !nombre_perfil || !edad) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios: correo, contraseña, nombre y edad' });
+      return res.status(400).json({ error: 'Faltan campos obligatorios' });
     }
 
     const existingUser = await User.findOne({ correo_electronico });
     if (existingUser) {
-      return res.status(400).json({ error: 'El correo electrónico ya está registrado' });
+      return res.status(400).json({ error: 'Correo ya registrado' });
     }
 
-    // Subir foto a Cloudinary si se envió
     let foto_perfil_url = null;
     if (req.file) {
       try {
@@ -66,13 +59,11 @@ exports.signup = async (req, res) => {
           resource_type: 'image'
         });
         foto_perfil_url = result.secure_url;
-      } catch (uploadErr) {
-        console.error('Error al subir a Cloudinary:', uploadErr.message);
-        // No fallamos el registro si la foto falla
+      } catch (err) {
+        console.error('Cloudinary error:', err);
       }
     }
 
-    // Crear nuevo usuario
     const newUser = new User({
       correo_electronico,
       contrasena: await bcrypt.hash(contrasena, 10),
@@ -108,50 +99,27 @@ exports.signup = async (req, res) => {
 
     await newUser.save();
 
-    // Generar token JWT
-    const token = jwt.sign(
-      { id: newUser._id },
-      process.env.JWT_SECRET || 'roomie-secret-key',
-      { expiresIn: '7d' }
-    );
+    const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET || 'roomie-secret-key', { expiresIn: '7d' });
 
     res.status(201).json({
       token,
-      user: {
-        id: newUser._id,
-        nombre: newUser.nombre_perfil
-      }
+      user: { id: newUser._id, nombre: newUser.nombre_perfil }
     });
   } catch (error) {
-    console.error('Error en signup:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('Signup error:', error);
+    res.status(500).json({ error: 'Error interno' });
   }
 };
 
-// ✅ Login (sin cambios, pero lo incluimos para contexto)
 exports.login = async (req, res) => {
   try {
     const { correo_electronico, contrasena } = req.body;
     const user = await User.findOne({ correo_electronico });
-    if (!user) {
+    if (!user || !(await bcrypt.compare(contrasena, user.contrasena))) {
       return res.status(400).json({ error: 'Credenciales inválidas' });
     }
-    const isMatch = await bcrypt.compare(contrasena, user.contrasena);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Credenciales inválidas' });
-    }
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET || 'roomie-secret-key',
-      { expiresIn: '7d' }
-    );
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        nombre: user.nombre_perfil
-      }
-    });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'roomie-secret-key', { expiresIn: '7d' });
+    res.json({ token, user: { id: user._id, nombre: user.nombre_perfil } });
   } catch (error) {
     res.status(500).json({ error: 'Error en login' });
   }

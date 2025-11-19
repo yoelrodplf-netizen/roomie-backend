@@ -1,4 +1,3 @@
-// src/routes/auth.routes.js
 const express = require('express');
 const router = express.Router();
 const { signup, login, uploadSingle } = require('../controllers/auth.controller');
