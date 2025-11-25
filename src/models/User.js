@@ -7,6 +7,14 @@ const userSchema = new mongoose.Schema({
   edad: { type: Number, required: true },
   genero: { type: String },
   profesion: { type: String },
+  rol: { 
+    type: String, 
+    enum: ['OFERENTE', 'BUSCADOR', 'AMBOS'], 
+    default: 'AMBOS' 
+  },
+  bio: { type: String, maxlength: 120, default: '' },
+  fotos_perfil: [{ type: String }],
+  fotos_propiedad: [{ type: String }],
   habito_limpieza_nivel: { type: Number, default: 50 },
   nivel_ruido_nivel: { type: Number, default: 50 },
   consumo_alcohol_nivel: { type: Number, default: 0 },
@@ -29,7 +37,6 @@ const userSchema = new mongoose.Schema({
   descripcion_roomie_ideal: { type: String },
   expectativas_hogar: { type: String },
   descripcion_personal: { type: String },
-  foto_perfil: { type: String, default: null },
   likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
 }, {
   timestamps: true

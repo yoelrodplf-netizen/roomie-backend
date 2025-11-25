@@ -1,8 +1,6 @@
 {
   "name": "roomie-backend",
   "version": "1.0.0",
-  "description": "Backend para Roomie Finder",
-  "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"

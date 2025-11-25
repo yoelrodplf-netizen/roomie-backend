@@ -5,7 +5,10 @@ const cloudinary = require('../config/cloudinary');
 const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
 
-exports.uploadSingle = upload.single('foto_perfil');
+exports.uploadFields = upload.fields([
+  { name: 'fotos_perfil', maxCount: 5 },
+  { name: 'fotos_propiedad', maxCount: 5 }
+]);
 
 exports.signup = async (req, res) => {
   try {
@@ -16,28 +19,8 @@ exports.signup = async (req, res) => {
       edad,
       genero,
       profesion,
-      habito_limpieza_nivel,
-      nivel_ruido_nivel,
-      consumo_alcohol_nivel,
-      frecuencia_invitados_nivel,
-      horario_vida,
-      es_fumador,
-      mascotas,
-      presupuesto_max_renta,
-      fecha_mudanza_min,
-      fecha_mudanza_max,
-      ubicacion_preferida,
-      tipo_propiedad,
-      es_amueblada,
-      quiere_bano_propio,
-      servicios_incluidos,
-      caracteristicas_adicionales,
-      hobbies,
-      filosofia_vida,
-      habilidades_intereses,
-      descripcion_roomie_ideal,
-      expectativas_hogar,
-      descripcion_personal
+      rol,
+      bio
     } = req.body;
 
     if (!correo_electronico || !contrasena || !nombre_perfil || !edad) {
@@ -49,18 +32,34 @@ exports.signup = async (req, res) => {
       return res.status(400).json({ error: 'Correo ya registrado' });
     }
 
-    let foto_perfil_url = null;
-    if (req.file) {
-      try {
-        const result = await cloudinary.uploader.upload(req.file.path, {
-          folder: 'roomie-profiles',
-          public_id: `signup-${nombre_perfil.replace(/\s+/g, '-')}-${Date.now()}`,
+    let fotos_perfil = [];
+    let fotos_propiedad = [];
+
+    if (req.files?.fotos_perfil) {
+      for (const file of req.files.fotos_perfil) {
+        const result = await cloudinary.uploader.upload(file.path, {
+          folder: 'roomie-photos/fotos_perfil',
+          public_id: `profile-${nombre_perfil}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           overwrite: true,
           resource_type: 'image'
         });
-        foto_perfil_url = result.secure_url;
-      } catch (err) {
-        console.error('Cloudinary error:', err);
+        fotos_perfil.push(result.secure_url);
+      }
+    }
+
+    if (fotos_perfil.length === 0) {
+      return res.status(400).json({ error: 'Debes subir al menos una foto de perfil' });
+    }
+
+    if (req.files?.fotos_propiedad && ['OFERENTE', 'AMBOS'].includes(rol)) {
+      for (const file of req.files.fotos_propiedad) {
+        const result = await cloudinary.uploader.upload(file.path, {
+          folder: 'roomie-photos/fotos_propiedad',
+          public_id: `property-${nombre_perfil}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          overwrite: true,
+          resource_type: 'image'
+        });
+        fotos_propiedad.push(result.secure_url);
       }
     }
 
@@ -71,34 +70,14 @@ exports.signup = async (req, res) => {
       edad: parseInt(edad),
       genero,
       profesion,
-      habito_limpieza_nivel: parseInt(habito_limpieza_nivel) || 50,
-      nivel_ruido_nivel: parseInt(nivel_ruido_nivel) || 50,
-      consumo_alcohol_nivel: parseInt(consumo_alcohol_nivel) || 0,
-      frecuencia_invitados_nivel: parseInt(frecuencia_invitados_nivel) || 30,
-      horario_vida,
-      es_fumador: es_fumador === 'true' || es_fumador === true,
-      mascotas,
-      presupuesto_max_renta,
-      fecha_mudanza_min,
-      fecha_mudanza_max,
-      ubicacion_preferida,
-      tipo_propiedad,
-      es_amueblada: es_amueblada === 'true' || es_amueblada === true,
-      quiere_bano_propio: quiere_bano_propio === 'true' || quiere_bano_propio === true,
-      servicios_incluidos: Array.isArray(servicios_incluidos) ? servicios_incluidos : (servicios_incluidos ? [servicios_incluidos] : []),
-      caracteristicas_adicionales: Array.isArray(caracteristicas_adicionales) ? caracteristicas_adicionales : (caracteristicas_adicionales ? [caracteristicas_adicionales] : []),
-      hobbies: Array.isArray(hobbies) ? hobbies : (hobbies ? [hobbies] : []),
-      filosofia_vida,
-      habilidades_intereses: Array.isArray(habilidades_intereses) ? habilidades_intereses : (habilidades_intereses ? [habilidades_intereses] : []),
-      descripcion_roomie_ideal,
-      expectativas_hogar,
-      descripcion_personal,
-      foto_perfil: foto_perfil_url,
+      rol,
+      bio: (bio || '').slice(0, 120),
+      fotos_perfil,
+      fotos_propiedad,
       likes: []
     });
 
     await newUser.save();
-
     const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET || 'roomie-secret-key', { expiresIn: '7d' });
 
     res.status(201).json({
